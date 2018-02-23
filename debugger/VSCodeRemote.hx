@@ -58,7 +58,7 @@ class VSCodeRemote implements IController
      * @param host is the host name of the debugging server to connect to
      * @param port is the port of the debugging server to connect to
      **/
-    public function new(host : String, defaultPort : Int = 6972)
+    function new(host : String, defaultPort : Int, silent : Bool)
     {
         LogDebuggerMessage("Starting App side debugger support.");
         var port = Std.parseInt(Sys.getEnv('HXCPP_DEBUGGER_PORT'));
@@ -68,26 +68,28 @@ class VSCodeRemote implements IController
 
         mHost = host;
         mPort = port;
+        mSilent = silent;
         mSocket = null;
 
         // Connect here.  We won't reconnect if there is a socket error.
-        function run() {
-          connect();
+        connect();
 
-          // Spin up the write thread *before* the debugger thread.  Otherwise,
-          // getNextCommand and acceptMessage are called before the write
-          // thread is ready to queue messages.
-          mWriteThread = Thread.create(function() {this.writeThreadLoop();});
+        // Spin up the write thread *before* the debugger thread.  Otherwise,
+        // getNextCommand and acceptMessage are called before the write
+        // thread is ready to queue messages.
+        mWriteThread = Thread.create(function() {this.writeThreadLoop();});
 
-          mThread = new DebuggerThread(this, true); // we should always start stopped so vscode can set this up correctly
-        }
-        if (Sys.getEnv('HXCPP_DEBUG') == 'true') {
-          // this was launched by vscode. Wait synchronously for the debugger to connect
-          run();
-        } else {
-          mSilent = true;
-          Thread.create(function() run());
-        }
+        mThread = new DebuggerThread(this, true); // we should always start stopped so vscode can set this up correctly
+    }
+
+    public static function start(host : String, defaultPort : Int = 6972) {
+      if (Sys.getEnv('HXCPP_DEBUG') == 'true') {
+        // This process was launched by the debugger. Wait until it's attached
+        new VSCodeRemote(host, defaultPort, true);
+      } else {
+        // run a thread waiting for it to be attached
+        cpp.vm.Thread.create(function() { new VSCodeRemote(host, defaultPort, false); trace('here'); });
+      }
     }
 
     private function closeSocket() {
