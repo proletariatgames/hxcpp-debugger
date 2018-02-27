@@ -29,7 +29,7 @@ class Api {
             if (cl.isExtern) {
               continue;
             }
-            var data:ClassDef = { vars: {} };
+            var data:Array<haxe.DynamicAccess<VariableProperties>> = [];
             if (cl.meta.has('runtimeDebugInfo') || cl.meta.has(':nativeGen') || cl.meta.has(':unreflective')) {
               continue;
             }
@@ -48,7 +48,9 @@ class Api {
                   att = att | ReadOnly;
                 }
               }
-              data.vars[cf.name] = new VariableProperties(kind, att, cf.isPublic ? Public : Protected);
+              var ret = {};
+              Reflect.setField(ret, cf.name, new VariableProperties(kind, att, cf.isPublic ? Public : Protected));
+              data.push(ret);
             }
             for (field in cl.fields.get()) {
               visitField(field, false);
@@ -56,7 +58,8 @@ class Api {
             for (field in cl.statics.get()) {
               visitField(field, true);
             }
-            cl.meta.add('runtimeDebugInfo', [macro $v{data}], cl.pos);
+            data.sort(function(v1, v2) return Reflect.compare(Reflect.fields(v1)[0], Reflect.fields(v2)[0]));
+            cl.meta.add('runtimeDebugInfo', [ for (data in data) macro $v{data}], cl.pos);
           case _:
           }
         }

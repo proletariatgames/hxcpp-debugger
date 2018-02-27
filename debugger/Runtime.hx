@@ -101,15 +101,21 @@ class Runtime {
     if (arr == null) {
       return getDataForClass(Type.getSuperClass(cls));
     }
-    var ret:ClassDef = arr[0];
+    var props:Array<haxe.DynamicAccess<VariableProperties>> = cast arr,
+        vars:haxe.DynamicAccess<VariableProperties> = cast {};
+    for (prop in props) {
+      for (field in prop.keys()) {
+        vars[field] = prop[field];
+      }
+    }
     var sup = getDataForClass(Type.getSuperClass(cls));
     if (sup != null) {
       for (v in sup.vars.keys()) {
         var sup:VariableProperties = sup.vars[v];
-        ret.vars[v] = new VariableProperties(BaseClass, sup.attributes, sup.visibility);
+        vars[v] = new VariableProperties(BaseClass, sup.attributes, sup.visibility);
       }
     }
-    return ret;
+    return { vars: vars };
   }
 
   public static function eq(a:Dynamic, b:Dynamic) {
