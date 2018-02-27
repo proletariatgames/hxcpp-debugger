@@ -42,6 +42,8 @@ import cpp.vm.Debugger;
  **/
 class VSCodeRemote implements IController
 {
+    public var isConnected(default, null):Bool;
+
     /**
      * Creates a debugger which will read input from the interface provided
      * by the given remote host, and emit output to that remote host.
@@ -70,32 +72,31 @@ class VSCodeRemote implements IController
         mPort = port;
         mSilent = silent;
         mSocket = null;
-
-        // Connect here.  We won't reconnect if there is a socket error.
-        connect();
-
-        // Spin up the write thread *before* the debugger thread.  Otherwise,
-        // getNextCommand and acceptMessage are called before the write
-        // thread is ready to queue messages.
-        mWriteThread = Thread.create(function() {this.writeThreadLoop();});
-
-        mThread = new DebuggerThread(this, true); // we should always start stopped so vscode can set this up correctly
     }
 
     public static function start(host : String, defaultPort : Int = 6972) {
-      if (Sys.getEnv('HXCPP_DEBUG') == 'true') {
-        // This process was launched by the debugger. Wait until it's attached
-        new VSCodeRemote(host, defaultPort, true);
-      } else {
-        // run a thread waiting for it to be attached
-        cpp.vm.Thread.create(function() { new VSCodeRemote(host, defaultPort, false); trace('here'); });
-      }
+        var ret = null;
+        if (Sys.getEnv('HXCPP_DEBUG') == 'true') {
+            // This process was launched by the debugger. Wait until it's attached
+            ret = new VSCodeRemote(host, defaultPort, true);
+            while (!ret.isConnected) {
+                if (!ret.attemptToConnect()) {
+                    Sys.sleep(3);
+                }
+            }
+        } else {
+            // run a thread waiting for it to be attached
+            ret = new VSCodeRemote(host, defaultPort, false);
+        }
+
+        return ret;
     }
 
     private function closeSocket() {
         if (mSocket != null) {
             mSocket.close();
             mSocket = null;
+            isConnected = false;
         }
     }
 
@@ -165,36 +166,52 @@ class VSCodeRemote implements IController
         }
     }
 
+    public function attemptToConnect():Bool {
+        if (isConnected) {
+            return true;
+        }
+        this.connect();
+        if (isConnected) {
+            // Spin up the write thread *before* the debugger thread.  Otherwise,
+            // getNextCommand and acceptMessage are called before the write
+            // thread is ready to queue messages.
+            mWriteThread = Thread.create(function() {this.writeThreadLoop();});
+
+            mThread = new DebuggerThread(this, true); // we should always start stopped so vscode can set this up correctly
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     private function connect()
     {
         var socket : sys.net.Socket = new sys.net.Socket();
 
-        while (true) {
-            try {
-                var host = new sys.net.Host(mHost);
-                if (host.ip == 0) {
-                    throw "Name lookup error.";
-                }
-                socket.connect(host, mPort);
-                HaxeProtocol.writeClientIdentification(socket.output);
-                HaxeProtocol.readServerIdentification(socket.input);
-                LogDebuggerMessage("Connected to debugging server at " +
-                            mHost + ":" + mPort + ".");
+        try {
+            var host = new sys.net.Host(mHost);
+            if (host.ip == 0) {
+                throw "Name lookup error.";
+            }
+            socket.connect(host, mPort);
+            HaxeProtocol.writeClientIdentification(socket.output);
+            HaxeProtocol.readServerIdentification(socket.input);
+            LogDebuggerMessage("Connected to debugging server at " +
+                        mHost + ":" + mPort + ".");
 
-                mSocket = socket;
-                return;
-            }
-            catch (e : Dynamic) {
-                if (!mSilent) {
-                    LogDebuggerMessage("Failed to connect to debugging server at " +
-                                mHost + ":" + mPort + " : " + e);
-                }
-            }
-            closeSocket();
+            mSocket = socket;
+            isConnected = true;
+            return;
+        }
+        catch (e : Dynamic) {
             if (!mSilent) {
-                LogDebuggerMessage("Trying again in 3 seconds.");
+                LogDebuggerMessage("Failed to connect to debugging server at " +
+                            mHost + ":" + mPort + " : " + e);
             }
-            Sys.sleep(3);
+        }
+        closeSocket();
+        if (!mSilent) {
+            LogDebuggerMessage("Trying again in 3 seconds.");
         }
     }
 
