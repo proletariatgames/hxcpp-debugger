@@ -78,15 +78,14 @@ class VSCodeRemote implements IController
         var ret = null;
         if (Sys.getEnv('HXCPP_DEBUG') == 'true') {
             // This process was launched by the debugger. Wait until it's attached
-            ret = new VSCodeRemote(host, defaultPort, true);
+            ret = new VSCodeRemote(host, defaultPort, false);
             while (!ret.isConnected) {
                 if (!ret.attemptToConnect()) {
                     Sys.sleep(3);
                 }
             }
         } else {
-            // run a thread waiting for it to be attached
-            ret = new VSCodeRemote(host, defaultPort, false);
+            ret = new VSCodeRemote(host, defaultPort, true);
         }
 
         return ret;
