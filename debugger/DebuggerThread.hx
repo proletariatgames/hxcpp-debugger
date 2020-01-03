@@ -23,9 +23,9 @@ import debugger.IController;
 import haxe.CallStack;
 
 #if cpp
-import cpp.vm.Deque;
-import cpp.vm.Mutex;
-import cpp.vm.Thread;
+import sys.thread.Deque;
+import sys.thread.Mutex;
+import sys.thread.Thread;
 #elseif neko
 import neko.vm.Deque;
 import neko.vm.Mutex;
